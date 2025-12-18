@@ -37,7 +37,7 @@
   </head>
 
   <body>
-    <audio id="bgm" src="/public/bgm.mp3" autoplay></audio>
+    <audio id="bgm" src="public/bgm.mp3" autoplay></audio>
 
     <!-- PixiJS -->
     <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.x/dist/browser/pixi.min.js"></script>
@@ -85,7 +85,7 @@
           console.log(PIXI.live2d.Live2DModel) // Does Not Exists
         
         
-          let cubismModel = "/public/live2d/tyrunny_lobby.model3.json";
+          let cubismModel = "public/live2d/tyrunny_lobby.model3.json";
 
           // Stage setup
           const app = new PIXI.Application({
@@ -262,7 +262,7 @@
           // Interactivity
           tyrant.interactive = true;
           tyrant.buttonMode = true;
-          tyrant.cursor = 'url("/public/custom_cursor.png") 16 16, auto';
+          tyrant.cursor = 'url("public/custom_cursor.png") 16 16, auto';
 
           let isDragging = false;
           let dragStartX = 0;
