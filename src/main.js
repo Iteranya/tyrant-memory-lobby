@@ -129,15 +129,29 @@ window.PIXI = PIXI;
 
   resizeContent();
 
+  // Add this after loading the model to see all parameters
+  const paramCount =
+    tyrant.internalModel.coreModel.getParameterDefaultValue(22);
+  console.log(
+    "default, max, min",
+    paramCount,
+    tyrant.internalModel.coreModel.getParameterMaximumValue(22),
+    tyrant.internalModel.coreModel.getParameterMinimumValue(22)
+  );
+
   //eye blink
   let timeSinceLastBlink = 0;
   let blinkInterval = 4000;
   let targetREyeValue = 1.0;
   let targetLEyeValue = 1.0;
+  let targetBlushValue = -5.0;
   let currentREyeValue =
     tyrant.internalModel.coreModel.getParameterValueById("ParamEyeROpen");
   let currentLEyeValue =
     tyrant.internalModel.coreModel.getParameterValueById("ParamEyeLOpen");
+  let currentBlushValue =
+    tyrant.internalModel.coreModel.getParameterValueByIndex(22);
+  console.log("Initial Blush Value:", currentBlushValue);
 
   app.ticker.add((delta) => {
     timeSinceLastBlink += delta * 16.67;
@@ -161,8 +175,10 @@ window.PIXI = PIXI;
     }
 
     const speed = 0.1;
+    console.log("Target Blush Value:", targetBlushValue);
     currentREyeValue += (targetREyeValue - currentREyeValue) * speed;
     currentLEyeValue += (targetLEyeValue - currentLEyeValue) * speed;
+    currentBlushValue += (targetBlushValue - currentBlushValue) * speed;
     tyrant.internalModel.coreModel.setParameterValueById(
       "ParamEyeROpen",
       currentREyeValue
@@ -170,6 +186,10 @@ window.PIXI = PIXI;
     tyrant.internalModel.coreModel.setParameterValueById(
       "ParamEyeLOpen",
       currentLEyeValue
+    );
+    tyrant.internalModel.coreModel.setParameterValueById(
+      "blush",
+      currentBlushValue
     );
   });
 
@@ -195,6 +215,7 @@ window.PIXI = PIXI;
       tyrant.internalModel.coreModel.getParameterValueById("ParamAngleY");
 
     targetREyeValue = 0.0;
+    targetBlushValue = 10;
   });
 
   tyrant.on("pointermove", (event) => {
@@ -220,6 +241,7 @@ window.PIXI = PIXI;
   window.addEventListener("pointerup", () => {
     isDragging = false;
     targetREyeValue = 1.0;
+    targetBlushValue = -5.0;
   });
 
   // load animation
