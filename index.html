@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>tyrant headpat</title>
+
     <style>
       body {
         margin: 0;
@@ -34,42 +35,358 @@
       }
     </style>
   </head>
+
   <body>
-    <audio id="bgm" src="/bgm.mp3" autoplay></audio>
+    <audio id="bgm" src="/public/bgm.mp3" autoplay></audio>
 
-    <script src="/live2dcubismcore.min.js"></script>
-    <script type="module" src="/src/main.js"></script>
+    <!-- PixiJS -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.x/dist/browser/pixi.min.js"></script>
+    
+    <!-- Cubism Core -->
+    <script src="https://cdn.jsdelivr.net/npm/live2dcubismcore@1.0.2/live2dcubismcore.min.js"></script>
 
-    <script>
+    <!-- Pixi Live2D -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/cubism4.min.js"></script>
+
+    <!-- Ripple Logic -->
+    <script defer>
       document.body.addEventListener("mousedown", (e) => {
         const ripple = document.createElement("div");
         ripple.className = "ripple";
-
-        const x = e.clientX;
-        const y = e.clientY;
-
-        ripple.style.left = x + "px";
-        ripple.style.top = y + "px";
-
+        ripple.style.left = e.clientX + "px";
+        ripple.style.top = e.clientY + "px";
         document.body.appendChild(ripple);
-
-        ripple.addEventListener("animationend", () => {
-          ripple.remove();
-        });
+        ripple.addEventListener("animationend", () => ripple.remove());
       });
     </script>
 
-    <script>
-      let audio = document.getElementById("bgm");
+    <!-- Audio Unlock -->
+    <script defer>
+      const audio = document.getElementById("bgm");
       audio.loop = true;
       audio.volume = 0.5;
+
       document.addEventListener(
         "click",
-        () => {
-          bgm.play().catch((err) => console.log("Audio play failed:", err));
-        },
+        () => audio.play().catch(() => {}),
         { once: true }
-      ); // only triggers once
+      );
+    </script>
+    
+    <!-- Main App Code -->
+    <script defer>
+      window.addEventListener('DOMContentLoaded', () => {
+        
+        (async () => {
+          const PIXI = window.PIXI
+          const Live2DModel = PIXI.live2d.Live2DModel
+          console.log(PIXI) // Exists
+          console.log(PIXI.live2d) // Exists
+          console.log(PIXI.live2d.Live2DModel) // Does Not Exists
+        
+        
+          let cubismModel = "/public/live2d/tyrunny_lobby.model3.json";
+
+          // Stage setup
+          const app = new PIXI.Application({
+            resizeTo: window,
+            autoStart: true,
+            backgroundColor: 0x000000 
+          });
+
+          document.body.appendChild(app.view);
+          app.view.style.position = "absolute";
+
+          const tyrant = await Live2DModel.from(cubismModel, {
+            autoInteract: false,
+          });
+
+          const [texture, trailTexture] = await new Promise((resolve) => {
+            PIXI.Loader.shared
+              .add("background", "public/bg.jpg")
+              .add("trail", "public/trail.png")
+              .load((loader, resources) => {
+                resolve([resources.background.texture, resources.trail.texture]);
+              });
+          });
+
+          const bg = new PIXI.Sprite(texture);
+
+          // Trail Logic
+          const historyX = [];
+          const historyY = [];
+          const historySize = 20;
+          const ropeSize = 100;
+          const points = [];
+
+          for (let i = 0; i < historySize; i++) {
+            historyX.push(tyrant.x);
+            historyY.push(tyrant.y);
+          }
+
+          for (let i = 0; i < ropeSize; i++) {
+            points.push(new PIXI.Point(0, 0));
+          }
+
+          const rope = new PIXI.SimpleRope(trailTexture, points);
+
+          let mouseposition = null;
+
+          app.stage.interactive = true;
+          app.stage.hitArea = app.renderer.screen;
+          app.stage.on("mousemove", (event) => {
+            mouseposition = mouseposition || { x: 0, y: 0 };
+            mouseposition.x = event.data.global.x;
+            mouseposition.y = event.data.global.y;
+          });
+
+          app.ticker.add(() => {
+            if (!mouseposition) return;
+
+            historyX.pop();
+            historyX.unshift(mouseposition.x);
+            historyY.pop();
+            historyY.unshift(mouseposition.y);
+
+            for (let i = 0; i < ropeSize; i++) {
+              const p = points[i];
+              const ix = cubicInterpolation(historyX, (i / ropeSize) * historySize);
+              const iy = cubicInterpolation(historyY, (i / ropeSize) * historySize);
+              p.x = ix;
+              p.y = iy;
+            }
+          });
+
+          function cubicInterpolation(array, t) {
+            const k = Math.floor(t);
+            const m = [getTangent(array, k), getTangent(array, k + 1)];
+            const p = [array[k], array[k + 1]];
+            t -= k;
+            const t2 = t * t;
+            const t3 = t * t2;
+            return (
+              (2 * t3 - 3 * t2 + 1) * p[0] +
+              (t3 - 2 * t2 + t) * m[0] +
+              (-2 * t3 + 3 * t2) * p[1] +
+              (t3 - t2) * m[1]
+            );
+          }
+
+          function getTangent(array, k) {
+            return (
+              (array[Math.min(k + 1, array.length - 1)] - array[Math.max(k - 1, 0)]) *
+              0.5
+            );
+          }
+
+          const container = new PIXI.Container();
+
+          function resizeContent() {
+            // Add safety check if background texture hasn't loaded fully
+            if(!bg.texture.width) return;
+
+            const scaleX = app.view.width / bg.texture.width;
+            const scaleY = app.view.height / bg.texture.height;
+            const scale = Math.max(scaleX, scaleY);
+
+            const modelBounds = tyrant.getBounds();
+            // Safety check for model bounds
+            if (modelBounds.width === 0) return;
+
+            const modelScaleX = app.view.width / modelBounds.width;
+            const modelScaleY = app.view.height / modelBounds.height;
+            const modelScale = Math.max(modelScaleX, modelScaleY);
+
+            tyrant.x = -50;
+            tyrant.y = -130;
+            tyrant.scale.set(modelScale * 1.1);
+            bg.scale.set(scale);
+          }
+
+          container.addChild(bg);
+          container.addChild(tyrant);
+          container.addChild(rope);
+
+          app.stage.addChild(container);
+
+          resizeContent();
+          
+          // Ensure resize happens on window resize
+          window.addEventListener('resize', resizeContent);
+
+          // Get initial parameter values
+          // Note: using getParameterValueById is often safer than Index if indices shift
+          let currentREyeValue = tyrant.internalModel.coreModel.getParameterValueById("ParamEyeROpen");
+          let currentLEyeValue = tyrant.internalModel.coreModel.getParameterValueById("ParamEyeLOpen");
+          // Assuming index 22 is blush, but using ID is safer if you know it (e.g., ParamCheek)
+          let currentBlushValue = tyrant.internalModel.coreModel.getParameterValueByIndex(22);
+          
+          console.log("Initial Blush Value:", currentBlushValue);
+
+          // Eye Blink Logic
+          let timeSinceLastBlink = 0;
+          let blinkInterval = 4000;
+          let targetREyeValue = 1.0;
+          let targetLEyeValue = 1.0;
+          let targetBlushValue = -5.0;
+
+          app.ticker.add((delta) => {
+            timeSinceLastBlink += delta * 16.67;
+
+            if (!isDragging) {
+              if (timeSinceLastBlink >= blinkInterval) {
+                targetREyeValue = 0.0;
+                targetLEyeValue = 0.0;
+                timeSinceLastBlink = 0;
+              }
+              if (
+                currentREyeValue <= 0.01 &&
+                targetREyeValue === 0.0
+              ) {
+                targetREyeValue = 1.0;
+                targetLEyeValue = 1.0;
+                blinkInterval = 2000 * Math.random() * (4 - 1) + 1;
+              }
+            }
+
+            const speed = 0.1;
+            currentREyeValue += (targetREyeValue - currentREyeValue) * speed;
+            currentLEyeValue += (targetLEyeValue - currentLEyeValue) * speed;
+            currentBlushValue += (targetBlushValue - currentBlushValue) * speed;
+            
+            tyrant.internalModel.coreModel.setParameterValueById("ParamEyeROpen", currentREyeValue);
+            tyrant.internalModel.coreModel.setParameterValueById("ParamEyeLOpen", currentLEyeValue);
+            tyrant.internalModel.coreModel.setParameterValueById("blush", currentBlushValue);
+          });
+
+          // Interactivity
+          tyrant.interactive = true;
+          tyrant.buttonMode = true;
+          tyrant.cursor = 'url("/public/custom_cursor.png") 16 16, auto';
+
+          let isDragging = false;
+          let dragStartX = 0;
+          let dragStartY = 0;
+          let modelStartX = 0;
+          let modelStartY = 0;
+
+          tyrant.on("pointerdown", (event) => {
+            isDragging = true;
+            dragStartX = event.data.global.x;
+            dragStartY = event.data.global.y;
+            modelStartX = tyrant.internalModel.coreModel.getParameterValueById("ParamAngleX");
+            modelStartY = tyrant.internalModel.coreModel.getParameterValueById("ParamAngleY"); // Usually Y maps to AngleY
+
+            targetREyeValue = 0.0;
+            targetBlushValue = 10;
+          });
+
+          tyrant.on("pointermove", (event) => {
+            if (isDragging) {
+              const currentX = event.data.global.x;
+              const deltaX = currentX - dragStartX;
+
+              tyrant.internalModel.coreModel.setParameterValueById(
+                "ParamAngleX",
+                modelStartX + deltaX * 0.09
+              );
+              // Usually AngleY is controlled by Y movement, but keeping your logic (X controls Y) if intended
+              tyrant.internalModel.coreModel.setParameterValueById(
+                "ParamAngleY",
+                modelStartX + deltaX * 0.09
+              );
+            }
+          });
+
+          app.stage.on("pointerup", () => {
+            isDragging = false;
+          });
+
+          window.addEventListener("pointerup", () => {
+            if(isDragging) {
+                isDragging = false;
+                targetREyeValue = 1.0;
+                targetBlushValue = -5.0;
+            }
+          });
+
+          // Animation Sequence
+          const animations = [
+            { x: -2800, y: -2100, scale: 4, hold: 2000, instant: true, panX: -2700, panY: -2110 },
+            { x: -2600, y: -1500, scale: 3.5, hold: 2000, instant: true, panX: -2660, panY: -1510 },
+            { x: -2800, y: -1000, scale: 3.5, hold: 2000, instant: true, panX: -2750, panY: -1010 },
+            { x: 0, y: 0, scale: 1, duration: 2000, instant: false },
+          ];
+
+          let currentAnim = 0;
+          let animProgress = 0;
+          let startX = 0, startY = 0, startScale = 1;
+          let targetX = 0, targetY = 0, targetScale = 1;
+          let panEndX = 0, panEndY = 0;
+          let animDuration = 0;
+          let isInstant = false;
+          let hasPan = false;
+
+          const startAnimation = (index) => {
+            if (index >= animations.length) return;
+
+            const anim = animations[index];
+            startX = container.x;
+            startY = container.y;
+            startScale = container.scale.x;
+            targetX = anim.x;
+            targetY = anim.y;
+            targetScale = anim.scale;
+            isInstant = anim.instant;
+            animDuration = anim.duration || anim.hold || 0;
+            animProgress = 0;
+
+            hasPan = anim.panX !== undefined && anim.panY !== undefined;
+            if (hasPan) {
+              panEndX = anim.panX;
+              panEndY = anim.panY;
+            }
+
+            if (isInstant) {
+              container.x = targetX;
+              container.y = targetY;
+              container.scale.set(targetScale);
+              startX = targetX;
+              startY = targetY;
+            }
+          };
+
+          const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+          const linear = (t) => t;
+
+          startAnimation(0);
+
+          app.ticker.add((delta) => {
+            if (currentAnim >= animations.length) return;
+
+            animProgress += delta * 16.0;
+
+            if (animProgress >= animDuration) {
+              currentAnim++;
+              startAnimation(currentAnim);
+              return;
+            }
+
+            const t = Math.min(animProgress / animDuration, 1);
+
+            if (isInstant && hasPan) {
+              const panT = linear(t);
+              container.x = startX + (panEndX - startX) * panT;
+              container.y = startY + (panEndY - startY) * panT;
+            } else if (!isInstant && animDuration > 0) {
+              const easedT = easeInOutCubic(t);
+              container.x = startX + (targetX - startX) * easedT;
+              container.y = startY + (targetY - startY) * easedT;
+              container.scale.set(startScale + (targetScale - startScale) * easedT);
+            }
+          });
+        })();
+      });
     </script>
   </body>
 </html>
